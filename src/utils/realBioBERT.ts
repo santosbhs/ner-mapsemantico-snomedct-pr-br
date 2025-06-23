@@ -45,8 +45,7 @@ export const initializeBioBERTpt = async (): Promise<void> => {
       NER_MODEL_NAME,
       { 
         device: 'webgpu',
-        model_file_name: 'model',
-        aggregation_strategy: 'simple'
+        model_file_name: 'model'
       }
     );
     
@@ -57,8 +56,7 @@ export const initializeBioBERTpt = async (): Promise<void> => {
     // Fallback para CPU
     nerPipeline = await pipeline(
       'token-classification', 
-      NER_MODEL_NAME,
-      { aggregation_strategy: 'simple' }
+      NER_MODEL_NAME
     );
   }
 };
@@ -71,7 +69,9 @@ export const extractEntitiesWithBioBERTpt = async (text: string): Promise<RealEn
   console.log('Executando NER com BioBERTpt no texto:', text.substring(0, 100) + '...');
 
   try {
-    const results = await nerPipeline(text);
+    const results = await nerPipeline(text, { 
+      aggregation_strategy: 'simple'
+    });
     console.log('Resultados do BioBERTpt:', results);
 
     const entities: RealEntity[] = results
