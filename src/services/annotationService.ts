@@ -35,13 +35,19 @@ export interface SaveAnnotationData {
 
 export const saveAnnotation = async (data: SaveAnnotationData) => {
   try {
+    // Verificar se o usuário está autenticado
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('Usuário não autenticado');
+    }
+
     // 1. Salvar a anotação principal
     const { data: annotation, error: annotationError } = await supabase
       .from('clinical_annotations')
       .insert({
         title: data.title || 'Anotação Clínica',
         original_text: data.originalText,
-        user_id: null // Será atualizado quando implementarmos autenticação
+        user_id: user.id
       })
       .select()
       .single();
@@ -66,18 +72,18 @@ export const saveAnnotation = async (data: SaveAnnotationData) => {
     if (entitiesError) throw entitiesError;
 
     // 3. Salvar os mapeamentos SNOMED
-    const mappingsData = data.mappings.map(mapping => ({
-      entity_id: savedEntities[mapping.entityIndex].id,
-      snomed_code: mapping.snomedCode,
-      snomed_term: mapping.snomedTerm,
-      original_snomed_term: mapping.originalSnomedTerm,
-      snomed_hierarchy: mapping.snomedHierarchy,
-      snomed_synonyms: mapping.snomedSynonyms,
-      similarity_score: mapping.similarityScore,
-      embedding_distance: mapping.embeddingDistance
-    }));
+    if (data.mappings && data.mappings.length > 0) {
+      const mappingsData = data.mappings.map(mapping => ({
+        entity_id: savedEntities[mapping.entityIndex].id,
+        snomed_code: mapping.snomedCode,
+        snomed_term: mapping.snomedTerm,
+        original_snomed_term: mapping.originalSnomedTerm,
+        snomed_hierarchy: mapping.snomedHierarchy,
+        snomed_synonyms: mapping.snomedSynonyms,
+        similarity_score: mapping.similarityScore,
+        embedding_distance: mapping.embeddingDistance
+      }));
 
-    if (mappingsData.length > 0) {
       const { error: mappingsError } = await supabase
         .from('snomed_mappings')
         .insert(mappingsData);
@@ -87,22 +93,37 @@ export const saveAnnotation = async (data: SaveAnnotationData) => {
 
     // 4. Salvar os mapeamentos HL7 (se fornecidos)
     if (data.hl7Mappings && data.hl7Mappings.length > 0) {
-      const hl7MappingsData = data.hl7Mappings.map(mapping => ({
-        entity_id: savedEntities[mapping.entityIndex].id,
-        hl7_code: mapping.hl7Code,
-        hl7_system: mapping.hl7System,
-        hl7_display: mapping.hl7Display,
-        hl7_code_system_name: mapping.hl7CodeSystemName,
-        hl7_version: mapping.hl7Version,
-        resource_type: mapping.resourceType,
-        similarity_score: mapping.similarityScore
-      }));
+      // Filtrar apenas mapeamentos válidos com entityIndex válido
+      const validHL7Mappings = data.hl7Mappings.filter(mapping => 
+        mapping.entityIndex >= 0 && 
+        mapping.entityIndex < savedEntities.length &&
+        mapping.hl7Code &&
+        mapping.hl7System &&
+        mapping.hl7Display
+      );
 
-      const { error: hl7MappingsError } = await supabase
-        .from('hl7_mappings')
-        .insert(hl7MappingsData);
+      if (validHL7Mappings.length > 0) {
+        const hl7MappingsData = validHL7Mappings.map(mapping => ({
+          entity_id: savedEntities[mapping.entityIndex].id,
+          hl7_code: mapping.hl7Code,
+          hl7_system: mapping.hl7System,
+          hl7_display: mapping.hl7Display,
+          hl7_code_system_name: mapping.hl7CodeSystemName,
+          hl7_version: mapping.hl7Version || '4.0.1',
+          resource_type: mapping.resourceType,
+          similarity_score: mapping.similarityScore
+        }));
 
-      if (hl7MappingsError) throw hl7MappingsError;
+        const { error: hl7MappingsError } = await supabase
+          .from('hl7_mappings')
+          .insert(hl7MappingsData);
+
+        if (hl7MappingsError) {
+          console.error('Erro ao salvar mapeamentos HL7:', hl7MappingsError);
+          // Não falhar completamente se os mapeamentos HL7 falharem
+          // throw hl7MappingsError;
+        }
+      }
     }
 
     return { success: true, annotationId: annotation.id };

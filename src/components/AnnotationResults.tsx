@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,61 +51,75 @@ const AnnotationResults = ({ originalText, entities, mappings, hl7Mappings = [] 
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const saveAttempted = useRef(false);
 
-  // Salvar automaticamente quando os resultados estiverem prontos
+  // Salvar automaticamente quando os resultados estiverem prontos (apenas uma vez)
   useEffect(() => {
     const autoSave = async () => {
-      if (entities.length > 0 && !isSaved && !isSaving) {
+      // Prevenir múltiplas tentativas de salvamento
+      if (entities.length > 0 && !isSaved && !isSaving && !saveAttempted.current) {
+        saveAttempted.current = true;
         setIsSaving(true);
         
-        const annotationData: SaveAnnotationData = {
-          title: `Anotação Automática - ${new Date().toLocaleString('pt-BR')}`,
-          originalText,
-          entities,
-          mappings: mappings.map((mapping, index) => ({
-            entityIndex: entities.findIndex(entity => entity.text === mapping.entityText),
-            snomedCode: mapping.snomedCode,
-            snomedTerm: mapping.snomedTerm,
-            originalSnomedTerm: mapping.originalSnomedTerm,
-            snomedHierarchy: mapping.snomedHierarchy,
-            snomedSynonyms: mapping.snomedSynonyms,
-            similarityScore: mapping.similarityScore,
-            embeddingDistance: mapping.embeddingDistance
-          })),
-          hl7Mappings: hl7Mappings.map((mapping, index) => ({
-            entityIndex: entities.findIndex(entity => entity.text === mapping.entityText),
-            hl7Code: mapping.hl7Code,
-            hl7System: mapping.hl7System,
-            hl7Display: mapping.hl7Display,
-            hl7CodeSystemName: mapping.hl7CodeSystemName,
-            hl7Version: mapping.hl7Version,
-            resourceType: mapping.resourceType,
-            similarityScore: mapping.similarityScore
-          }))
-        };
+        try {
+          const annotationData: SaveAnnotationData = {
+            title: `Anotação Automática - ${new Date().toLocaleString('pt-BR')}`,
+            originalText,
+            entities,
+            mappings: mappings.map((mapping, index) => ({
+              entityIndex: entities.findIndex(entity => entity.text === mapping.entityText),
+              snomedCode: mapping.snomedCode,
+              snomedTerm: mapping.snomedTerm,
+              originalSnomedTerm: mapping.originalSnomedTerm,
+              snomedHierarchy: mapping.snomedHierarchy,
+              snomedSynonyms: mapping.snomedSynonyms,
+              similarityScore: mapping.similarityScore,
+              embeddingDistance: mapping.embeddingDistance
+            })).filter(m => m.entityIndex !== -1), // Filtrar índices inválidos
+            hl7Mappings: hl7Mappings.map((mapping, index) => ({
+              entityIndex: entities.findIndex(entity => entity.text === mapping.entityText),
+              hl7Code: mapping.hl7Code,
+              hl7System: mapping.hl7System,
+              hl7Display: mapping.hl7Display,
+              hl7CodeSystemName: mapping.hl7CodeSystemName,
+              hl7Version: mapping.hl7Version,
+              resourceType: mapping.resourceType,
+              similarityScore: mapping.similarityScore
+            })).filter(m => m.entityIndex !== -1) // Filtrar índices inválidos
+          };
 
-        const result = await saveAnnotation(annotationData);
-        
-        if (result.success) {
-          setIsSaved(true);
-          setSavedId(result.annotationId);
-          toast({
-            title: "Anotação salva automaticamente!",
-            description: "Os resultados foram salvos no Supabase com sucesso.",
-          });
-        } else {
+          const result = await saveAnnotation(annotationData);
+          
+          if (result.success) {
+            setIsSaved(true);
+            setSavedId(result.annotationId);
+            toast({
+              title: "Anotação salva automaticamente!",
+              description: "Os resultados foram salvos no Supabase com sucesso.",
+            });
+          } else {
+            toast({
+              title: "Erro ao salvar automaticamente",
+              description: result.error || "Não foi possível salvar a anotação.",
+              variant: "destructive"
+            });
+          }
+        } catch (error) {
+          console.error('Erro durante salvamento:', error);
           toast({
             title: "Erro ao salvar automaticamente",
-            description: result.error || "Não foi possível salvar a anotação.",
+            description: "Ocorreu um erro inesperado durante o salvamento.",
             variant: "destructive"
           });
+        } finally {
+          setIsSaving(false);
         }
-        
-        setIsSaving(false);
       }
     };
 
-    autoSave();
+    // Delay para evitar múltiplas chamadas
+    const timeoutId = setTimeout(autoSave, 1000);
+    return () => clearTimeout(timeoutId);
   }, [entities, mappings, hl7Mappings, originalText, isSaved, isSaving]);
 
   const exportToJSON = () => {
