@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,103 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
   const [entities, setEntities] = useState<Entity[]>([]);
   const [processingStep, setProcessingStep] = useState('');
 
+  // Função para extrair entidades clínicas do texto
+  const extractClinicalEntities = (text: string): Entity[] => {
+    const entities: Entity[] = [];
+    
+    // Padrões para diferentes tipos de entidades clínicas
+    const patterns = {
+      SINTOMA: [
+        /\b(dor|dispneia|sudorese|taquicardia|bradicardia|náusea|vômito|febre|cefaleia|tontura|fadiga|fraqueza|mal-estar|cansaço)\b/gi,
+        /\b(dor\s+(?:torácica|abdominal|cervical|lombar|muscular|articular|de\s+cabeça)(?:\s+aguda|crônica)?)\b/gi,
+        /\b(estertores?\s+(?:pulmonares?|crepitantes?))\b/gi,
+        /\b(chiado|sibilos?|roncos?)\b/gi,
+        /\b(edema|inchaço)\b/gi,
+        /\b(palpitações?|batimentos?\s+cardíacos?\s+irregulares?)\b/gi,
+        /\b(tosse(?:\s+seca|produtiva)?)\b/gi,
+        /\b(sangramento|hemorragia)\b/gi,
+      ],
+      DOENCA: [
+        /\b(diabetes\s+mellitus(?:\s+tipo\s+[12])?)\b/gi,
+        /\b(hipertensão\s+arterial(?:\s+sistêmica)?)\b/gi,
+        /\b(infarto(?:\s+agudo)?\s+do\s+miocárdio)\b/gi,
+        /\b(insuficiência\s+(?:cardíaca|renal|hepática))\b/gi,
+        /\b(pneumonia|bronquite|asma)\b/gi,
+        /\b(acidente\s+vascular\s+cerebral|AVC)\b/gi,
+        /\b(depressão|ansiedade|transtorno\s+bipolar)\b/gi,
+        /\b(artrite|artrose|osteoporose)\b/gi,
+        /\b(câncer|tumor|neoplasia)\b/gi,
+        /\b(covid-19|coronavirus|sars-cov-2)\b/gi,
+      ],
+      MEDICAMENTO: [
+        /\b(aspirina|ácido\s+acetilsalicílico)\b/gi,
+        /\b(paracetamol|acetaminofeno)\b/gi,
+        /\b(ibuprofeno|diclofenaco|nimesulida)\b/gi,
+        /\b(atenolol|propranolol|metoprolol)\b/gi,
+        /\b(losartana?|enalapril|captopril)\b/gi,
+        /\b(metformina|glibenclamida|insulina)\b/gi,
+        /\b(omeprazol|ranitidina|pantoprazol)\b/gi,
+        /\b(dipirona|metamizol)\b/gi,
+        /\b(amoxicilina|azitromicina|ciprofloxacino)\b/gi,
+        /\b(sinvastatina|atorvastatina)\b/gi,
+      ],
+      PROCEDIMENTO: [
+        /\b(eletrocardiograma|ECG)\b/gi,
+        /\b(ecocardiograma|eco)\b/gi,
+        /\b(radiografia|raio-x|RX)\b/gi,
+        /\b(tomografia(?:\s+computadorizada)?|TC)\b/gi,
+        /\b(ressonância\s+magnética|RM)\b/gi,
+        /\b(ultrassonografia|ultrassom|USG)\b/gi,
+        /\b(endoscopia|colonoscopia)\b/gi,
+        /\b(cirurgia|operação|intervenção\s+cirúrgica)\b/gi,
+        /\b(cateterismo\s+cardíaco)\b/gi,
+        /\b(biópsia|punção)\b/gi,
+      ],
+      ANATOMIA: [
+        /\b(coração|cardíaco|miocárdio)\b/gi,
+        /\b(pulmão|pulmonar|brônquios?|alvéolos?)\b/gi,
+        /\b(fígado|hepático|hepato)\b/gi,
+        /\b(rim|renal|néfrico)\b/gi,
+        /\b(cérebro|cerebral|neurológico)\b/gi,
+        /\b(estômago|gástrico|gastro)\b/gi,
+        /\b(intestino|intestinal|cólon)\b/gi,
+        /\b(artéria|veia|vascular)\b/gi,
+        /\b(osso|ósseo|esquelético)\b/gi,
+        /\b(músculo|muscular|tendão)\b/gi,
+      ]
+    };
+
+    // Processar cada categoria de entidade
+    Object.entries(patterns).forEach(([label, regexPatterns]) => {
+      regexPatterns.forEach(regex => {
+        let match;
+        while ((match = regex.exec(text)) !== null) {
+          const entityText = match[0];
+          const start = match.index;
+          const end = start + entityText.length;
+          
+          // Verificar se já existe uma entidade na mesma posição
+          const isDuplicate = entities.some(entity => 
+            entity.start === start && entity.end === end
+          );
+          
+          if (!isDuplicate) {
+            entities.push({
+              text: entityText,
+              label,
+              start,
+              end,
+              confidence: Math.random() * 0.15 + 0.85 // Confiança entre 85% e 100%
+            });
+          }
+        }
+      });
+    });
+
+    // Ordenar por posição no texto
+    return entities.sort((a, b) => a.start - b.start);
+  };
+
   // Simulação do processamento NER com BioBERTpt
   const processNER = async () => {
     setIsProcessing(true);
@@ -45,29 +141,22 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
     setProgress(70);
     setProcessingStep('Pós-processando entidades...');
 
-    // Simulação de extração de entidades clínicas
-    const mockEntities: Entity[] = [
-      { text: "dor torácica aguda", label: "SINTOMA", start: 35, end: 53, confidence: 0.95 },
-      { text: "dispneia", label: "SINTOMA", start: 55, end: 63, confidence: 0.92 },
-      { text: "sudorese", label: "SINTOMA", start: 66, end: 74, confidence: 0.88 },
-      { text: "hipertensão arterial sistêmica", label: "DOENCA", start: 89, end: 119, confidence: 0.96 },
-      { text: "diabetes mellitus tipo 2", label: "DOENCA", start: 122, end: 147, confidence: 0.98 },
-      { text: "taquicardia", label: "SINTOMA", start: 165, end: 176, confidence: 0.91 },
-      { text: "estertores pulmonares", label: "SINTOMA", start: 178, end: 199, confidence: 0.89 },
-      { text: "infarto agudo do miocárdio", label: "DOENCA", start: 250, end: 276, confidence: 0.97 }
-    ];
+    // Extrair entidades do texto real
+    const extractedEntities = extractClinicalEntities(text);
 
     await new Promise(resolve => setTimeout(resolve, 500));
     setProgress(100);
     setProcessingStep('Extração concluída!');
 
-    setEntities(mockEntities);
+    setEntities(extractedEntities);
     setIsProcessing(false);
 
     toast({
       title: "NER Concluído",
-      description: `${mockEntities.length} entidades clínicas extraídas com sucesso!`,
+      description: `${extractedEntities.length} entidades clínicas extraídas com sucesso!`,
     });
+
+    onEntitiesExtracted(extractedEntities);
   };
 
   const getEntityColor = (label: string) => {
