@@ -1,10 +1,10 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, FileJson, FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Download, FileJson, FileSpreadsheet, CheckCircle, AlertCircle, Target, Activity } from "lucide-react";
 import { saveAnnotation, SaveAnnotationData } from "@/services/annotationService";
 import { toast } from "@/hooks/use-toast";
 
@@ -27,13 +27,26 @@ interface Mapping {
   embeddingDistance: number;
 }
 
+interface HL7Mapping {
+  entityText: string;
+  entityLabel: string;
+  hl7Code: string;
+  hl7System: string;
+  hl7Display: string;
+  hl7CodeSystemName: string;
+  hl7Version: string;
+  resourceType: string;
+  similarityScore: number;
+}
+
 interface AnnotationResultsProps {
   originalText: string;
   entities: Entity[];
   mappings: Mapping[];
+  hl7Mappings?: HL7Mapping[];
 }
 
-const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResultsProps) => {
+const AnnotationResults = ({ originalText, entities, mappings, hl7Mappings = [] }: AnnotationResultsProps) => {
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -57,6 +70,16 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
             snomedSynonyms: mapping.snomedSynonyms,
             similarityScore: mapping.similarityScore,
             embeddingDistance: mapping.embeddingDistance
+          })),
+          hl7Mappings: hl7Mappings.map((mapping, index) => ({
+            entityIndex: entities.findIndex(entity => entity.text === mapping.entityText),
+            hl7Code: mapping.hl7Code,
+            hl7System: mapping.hl7System,
+            hl7Display: mapping.hl7Display,
+            hl7CodeSystemName: mapping.hl7CodeSystemName,
+            hl7Version: mapping.hl7Version,
+            resourceType: mapping.resourceType,
+            similarityScore: mapping.similarityScore
           }))
         };
 
@@ -82,14 +105,15 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
     };
 
     autoSave();
-  }, [entities, mappings, originalText, isSaved, isSaving]);
+  }, [entities, mappings, hl7Mappings, originalText, isSaved, isSaving]);
 
   const exportToJSON = () => {
     const data = {
       id: savedId,
       originalText,
       entities,
-      mappings,
+      snomedMappings: mappings,
+      hl7Mappings,
       savedAt: new Date().toISOString(),
       exportedAt: new Date().toISOString()
     };
@@ -98,24 +122,28 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `anotacao-clinica-${savedId || Date.now()}.json`;
+    a.download = `anotacao-clinica-completa-${savedId || Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const exportToCSV = () => {
     const csvData = [
-      ['Entidade', 'Categoria', 'Posição', 'Confiança', 'Código SNOMED', 'Termo SNOMED', 'Similaridade'],
+      ['Entidade', 'Categoria', 'Posição', 'Confiança', 'SNOMED Code', 'SNOMED Term', 'HL7 Code', 'HL7 System', 'HL7 Display', 'Resource Type'],
       ...entities.map(entity => {
-        const mapping = mappings.find(m => m.entityText === entity.text);
+        const snomedMapping = mappings.find(m => m.entityText === entity.text);
+        const hl7Mapping = hl7Mappings.find(m => m.entityText === entity.text);
         return [
           entity.text,
           entity.label,
           `${entity.start}-${entity.end}`,
           entity.confidence.toString(),
-          mapping?.snomedCode || '',
-          mapping?.snomedTerm || '',
-          mapping?.similarityScore.toString() || ''
+          snomedMapping?.snomedCode || '',
+          snomedMapping?.snomedTerm || '',
+          hl7Mapping?.hl7Code || '',
+          hl7Mapping?.hl7CodeSystemName || '',
+          hl7Mapping?.hl7Display || '',
+          hl7Mapping?.resourceType || ''
         ];
       })
     ];
@@ -125,7 +153,7 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `anotacao-clinica-${savedId || Date.now()}.csv`;
+    a.download = `anotacao-clinica-completa-${savedId || Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -136,7 +164,7 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle>Resultados da Anotação</CardTitle>
+            <CardTitle>Resultados da Anotação Completa</CardTitle>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 {isSaving ? (
@@ -174,23 +202,27 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
       {/* Resumo dos resultados */}
       <Card>
         <CardHeader>
-          <CardTitle>Resumo</CardTitle>
+          <CardTitle>Resumo Geral</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="text-center p-4 bg-muted/20 rounded-lg">
               <div className="text-2xl font-bold text-blue-600">{entities.length}</div>
               <div className="text-sm text-muted-foreground">Entidades Extraídas</div>
             </div>
             <div className="text-center p-4 bg-muted/20 rounded-lg">
               <div className="text-2xl font-bold text-green-600">{mappings.length}</div>
-              <div className="text-sm text-muted-foreground">Mapeamentos SNOMED</div>
+              <div className="text-sm text-muted-foreground">SNOMED CT</div>
+            </div>
+            <div className="text-center p-4 bg-muted/20 rounded-lg">
+              <div className="text-2xl font-bold text-orange-600">{hl7Mappings.length}</div>
+              <div className="text-sm text-muted-foreground">HL7 FHIR</div>
             </div>
             <div className="text-center p-4 bg-muted/20 rounded-lg">
               <div className="text-2xl font-bold text-purple-600">
-                {entities.length > 0 ? ((mappings.length / entities.length) * 100).toFixed(1) : 0}%
+                {entities.length > 0 ? (((mappings.length + hl7Mappings.length) / (entities.length * 2)) * 100).toFixed(1) : 0}%
               </div>
-              <div className="text-sm text-muted-foreground">Taxa de Mapeamento</div>
+              <div className="text-sm text-muted-foreground">Cobertura Total</div>
             </div>
           </div>
 
@@ -218,44 +250,105 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
         </CardContent>
       </Card>
 
-      {/* Tabela de mapeamentos */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Mapeamentos SNOMED CT</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Entidade</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Código SNOMED</TableHead>
-                <TableHead>Termo SNOMED</TableHead>
-                <TableHead>Similaridade</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mappings.map((mapping, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{mapping.entityText}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {entities.find(e => e.text === mapping.entityText)?.label || 'N/A'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">{mapping.snomedCode}</TableCell>
-                  <TableCell>{mapping.snomedTerm}</TableCell>
-                  <TableCell>
-                    <Badge variant={mapping.similarityScore > 0.8 ? "default" : "secondary"}>
-                      {(mapping.similarityScore * 100).toFixed(1)}%
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Mapeamentos em abas */}
+      <Tabs defaultValue="snomed" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="snomed" className="flex items-center gap-2">
+            <Target className="h-4 w-4" />
+            SNOMED CT ({mappings.length})
+          </TabsTrigger>
+          <TabsTrigger value="hl7" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            HL7 FHIR ({hl7Mappings.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="snomed">
+          <Card>
+            <CardHeader>
+              <CardTitle>Mapeamentos SNOMED CT</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entidade</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Código SNOMED</TableHead>
+                    <TableHead>Termo SNOMED</TableHead>
+                    <TableHead>Similaridade</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {mappings.map((mapping, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{mapping.entityText}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {entities.find(e => e.text === mapping.entityText)?.label || 'N/A'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{mapping.snomedCode}</TableCell>
+                      <TableCell>{mapping.snomedTerm}</TableCell>
+                      <TableCell>
+                        <Badge variant={mapping.similarityScore > 0.8 ? "default" : "secondary"}>
+                          {(mapping.similarityScore * 100).toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="hl7">
+          <Card>
+            <CardHeader>
+              <CardTitle>Mapeamentos HL7 FHIR</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entidade</TableHead>
+                    <TableHead>Código HL7</TableHead>
+                    <TableHead>Sistema</TableHead>
+                    <TableHead>Display</TableHead>
+                    <TableHead>Recurso FHIR</TableHead>
+                    <TableHead>Similaridade</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {hl7Mappings.map((mapping, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">{mapping.entityText}</TableCell>
+                      <TableCell className="font-mono text-sm">{mapping.hl7Code}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {mapping.hl7CodeSystemName}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{mapping.hl7Display}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {mapping.resourceType}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={mapping.similarityScore > 0.8 ? "default" : "secondary"}>
+                          {(mapping.similarityScore * 100).toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

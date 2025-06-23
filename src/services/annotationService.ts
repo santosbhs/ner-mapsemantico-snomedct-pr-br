@@ -21,6 +21,16 @@ export interface SaveAnnotationData {
     similarityScore: number;
     embeddingDistance: number;
   }>;
+  hl7Mappings?: Array<{
+    entityIndex: number;
+    hl7Code: string;
+    hl7System: string;
+    hl7Display: string;
+    hl7CodeSystemName: string;
+    hl7Version: string;
+    resourceType: string;
+    similarityScore: number;
+  }>;
 }
 
 export const saveAnnotation = async (data: SaveAnnotationData) => {
@@ -31,7 +41,7 @@ export const saveAnnotation = async (data: SaveAnnotationData) => {
       .insert({
         title: data.title || 'Anotação Clínica',
         original_text: data.originalText,
-        user_id: null // Permitir salvamento anônimo por enquanto
+        user_id: null // Será atualizado quando implementarmos autenticação
       })
       .select()
       .single();
@@ -75,6 +85,26 @@ export const saveAnnotation = async (data: SaveAnnotationData) => {
       if (mappingsError) throw mappingsError;
     }
 
+    // 4. Salvar os mapeamentos HL7 (se fornecidos)
+    if (data.hl7Mappings && data.hl7Mappings.length > 0) {
+      const hl7MappingsData = data.hl7Mappings.map(mapping => ({
+        entity_id: savedEntities[mapping.entityIndex].id,
+        hl7_code: mapping.hl7Code,
+        hl7_system: mapping.hl7System,
+        hl7_display: mapping.hl7Display,
+        hl7_code_system_name: mapping.hl7CodeSystemName,
+        hl7_version: mapping.hl7Version,
+        resource_type: mapping.resourceType,
+        similarity_score: mapping.similarityScore
+      }));
+
+      const { error: hl7MappingsError } = await supabase
+        .from('hl7_mappings')
+        .insert(hl7MappingsData);
+
+      if (hl7MappingsError) throw hl7MappingsError;
+    }
+
     return { success: true, annotationId: annotation.id };
   } catch (error) {
     console.error('Erro ao salvar anotação:', error);
@@ -90,7 +120,8 @@ export const loadAnnotations = async () => {
         *,
         extracted_entities (
           *,
-          snomed_mappings (*)
+          snomed_mappings (*),
+          hl7_mappings (*)
         )
       `)
       .order('created_at', { ascending: false });

@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Brain, FileText, Cpu, Target, History } from "lucide-react";
+import { Brain, FileText, Cpu, Target, History, Activity } from "lucide-react";
 import ClinicalTextInput from "@/components/ClinicalTextInput";
 import NERProcessor from "@/components/NERProcessor";
 import SnomedMapper from "@/components/SnomedMapper";
+import HL7Mapper from "@/components/HL7Mapper";
 import AnnotationResults from "@/components/AnnotationResults";
 import SavedAnnotationsList from "@/components/SavedAnnotationsList";
 
@@ -14,12 +15,14 @@ const Index = () => {
   const [clinicalText, setClinicalText] = useState('');
   const [extractedEntities, setExtractedEntities] = useState([]);
   const [snomedMappings, setSnomedMappings] = useState([]);
+  const [hl7Mappings, setHL7Mappings] = useState([]);
   const [processingStep, setProcessingStep] = useState(0);
 
   const steps = [
     { id: 'input', title: 'Narrativa Clínica', icon: FileText },
     { id: 'ner', title: 'Extração NER', icon: Brain },
-    { id: 'mapping', title: 'Mapeamento SNOMED', icon: Target },
+    { id: 'snomed', title: 'SNOMED CT', icon: Target },
+    { id: 'hl7', title: 'HL7 FHIR', icon: Activity },
     { id: 'results', title: 'Resultados', icon: Cpu },
     { id: 'saved', title: 'Histórico', icon: History }
   ];
@@ -32,12 +35,14 @@ const Index = () => {
             Anotação de Termos Clínicos
           </h1>
           <p className="text-xl text-muted-foreground mb-2">
-            NER + Mapeamento Semântico para SNOMED CT PT-BR
+            NER + Mapeamento Semântico para SNOMED CT + HL7 FHIR
           </p>
           <div className="flex justify-center gap-2 flex-wrap">
             <Badge variant="secondary">BioBERTpt</Badge>
             <Badge variant="secondary">SNOMED CT</Badge>
-            <Badge variant="secondary">Similaridade Cosseno</Badge>
+            <Badge variant="secondary">HL7 FHIR</Badge>
+            <Badge variant="secondary">LOINC</Badge>
+            <Badge variant="secondary">ICD-10</Badge>
             <Badge variant="secondary">Português Brasileiro</Badge>
             <Badge variant="secondary">Supabase Storage</Badge>
           </div>
@@ -81,7 +86,7 @@ const Index = () => {
         </div>
 
         <Tabs value={steps[processingStep].id} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             {steps.map((step, index) => (
               <TabsTrigger
                 key={step.id}
@@ -112,7 +117,7 @@ const Index = () => {
             />
           </TabsContent>
 
-          <TabsContent value="mapping" className="mt-6">
+          <TabsContent value="snomed" className="mt-6">
             <SnomedMapper 
               entities={extractedEntities}
               onMappingsComplete={(mappings) => {
@@ -122,11 +127,22 @@ const Index = () => {
             />
           </TabsContent>
 
+          <TabsContent value="hl7" className="mt-6">
+            <HL7Mapper 
+              entities={extractedEntities}
+              onMappingsComplete={(mappings) => {
+                setHL7Mappings(mappings);
+                setProcessingStep(4);
+              }}
+            />
+          </TabsContent>
+
           <TabsContent value="results" className="mt-6">
             <AnnotationResults 
               originalText={clinicalText}
               entities={extractedEntities}
               mappings={snomedMappings}
+              hl7Mappings={hl7Mappings}
             />
           </TabsContent>
 

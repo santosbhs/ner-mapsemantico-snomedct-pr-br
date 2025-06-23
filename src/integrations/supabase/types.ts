@@ -77,6 +77,53 @@ export type Database = {
           },
         ]
       }
+      hl7_mappings: {
+        Row: {
+          created_at: string
+          entity_id: string
+          hl7_code: string
+          hl7_code_system_name: string
+          hl7_display: string
+          hl7_system: string
+          hl7_version: string | null
+          id: string
+          resource_type: string
+          similarity_score: number
+        }
+        Insert: {
+          created_at?: string
+          entity_id: string
+          hl7_code: string
+          hl7_code_system_name: string
+          hl7_display: string
+          hl7_system: string
+          hl7_version?: string | null
+          id?: string
+          resource_type: string
+          similarity_score: number
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string
+          hl7_code?: string
+          hl7_code_system_name?: string
+          hl7_display?: string
+          hl7_system?: string
+          hl7_version?: string | null
+          id?: string
+          resource_type?: string
+          similarity_score?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hl7_mappings_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "extracted_entities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       snomed_mappings: {
         Row: {
           created_at: string
