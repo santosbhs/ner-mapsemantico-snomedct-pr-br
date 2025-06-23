@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Brain, ArrowRight, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { initializeBioBERTpt, extractEntitiesWithBioBERTpt, type RealEntity } from "@/utils/realBioBERT";
+import { 
+  initializeBioBERTpt, 
+  extractEntitiesWithBioBERTpt, 
+  getCurrentModel, 
+  isUsingPatternFallback,
+  type RealEntity 
+} from "@/utils/realBioBERT";
 import NERProcessingState from "./NERProcessingState";
 import EntityResults from "./EntityResults";
 
@@ -21,6 +27,7 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
   const [processingStep, setProcessingStep] = useState('');
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [modelStatus, setModelStatus] = useState<string>('unknown');
 
   const processRealNER = async () => {
     setIsProcessing(true);
@@ -37,20 +44,23 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
       // Carregar modelo se ainda não foi carregado
       if (!isModelLoaded) {
         setProgress(10);
-        setProcessingStep('Baixando modelo BioBERTpt (pode demorar na primeira execução)...');
+        setProcessingStep('Carregando modelo BioBERTpt...');
         
         await initializeBioBERTpt();
         setIsModelLoaded(true);
+        setModelStatus(getCurrentModel());
         setProgress(30);
       }
 
-      setProcessingStep('Tokenizando texto clínico...');
+      const usingFallback = isUsingPatternFallback();
+      
+      setProcessingStep(usingFallback ? 'Aplicando padrões clínicos...' : 'Tokenizando texto clínico...');
       setProgress(50);
 
       // Simular delay para mostrar progresso
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      setProcessingStep('Executando inferência NER com BioBERTpt...');
+      setProcessingStep(usingFallback ? 'Extraindo entidades com padrões...' : 'Executando inferência NER com BioBERTpt...');
       setProgress(70);
 
       // Executar NER real
@@ -67,16 +77,18 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
       setEntities(extractedEntities);
       setIsProcessing(false);
 
+      const methodUsed = usingFallback ? 'padrões clínicos' : `modelo ${getCurrentModel()}`;
+
       if (extractedEntities.length === 0) {
         toast({
           title: "NER Concluído",
-          description: "Nenhuma entidade clínica foi encontrada no texto. Tente com um texto mais específico.",
+          description: `Nenhuma entidade clínica foi encontrada no texto usando ${methodUsed}. Tente com um texto mais específico.`,
           variant: "destructive"
         });
       } else {
         toast({
           title: "NER Concluído",
-          description: `${extractedEntities.length} entidades clínicas extraídas com BioBERTpt!`,
+          description: `${extractedEntities.length} entidades clínicas extraídas usando ${methodUsed}!`,
         });
       }
 
@@ -102,6 +114,11 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
             Extração de Entidades com BioBERTpt Real
+            {modelStatus === 'clinical-patterns-fallback' && (
+              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                Fallback
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -117,6 +134,7 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
                   onClick={() => {
                     setLoadingError(null);
                     setIsModelLoaded(false);
+                    setModelStatus('unknown');
                   }}
                 >
                   Tentar Novamente
@@ -132,6 +150,7 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
               processingStep={processingStep}
               onProcessStart={processRealNER}
               isRealModel={true}
+              modelStatus={modelStatus}
             />
           ) : isProcessing ? (
             <NERProcessingState
@@ -140,6 +159,7 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
               processingStep={processingStep}
               onProcessStart={processRealNER}
               isRealModel={true}
+              modelStatus={modelStatus}
             />
           ) : entities.length > 0 ? (
             <EntityResults entities={entities} text={text} />
