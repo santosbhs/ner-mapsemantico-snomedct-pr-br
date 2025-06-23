@@ -1,9 +1,11 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Brain, FileText, Cpu, Target, History, Activity } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import Header from "@/components/Header";
 import ClinicalTextInput from "@/components/ClinicalTextInput";
 import NERProcessor from "@/components/NERProcessor";
 import SnomedMapper from "@/components/SnomedMapper";
@@ -12,6 +14,9 @@ import AnnotationResults from "@/components/AnnotationResults";
 import SavedAnnotationsList from "@/components/SavedAnnotationsList";
 
 const Index = () => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  
   const [clinicalText, setClinicalText] = useState('');
   const [extractedEntities, setExtractedEntities] = useState([]);
   const [snomedMappings, setSnomedMappings] = useState([]);
@@ -27,8 +32,33 @@ const Index = () => {
     { id: 'saved', title: 'Histórico', icon: History }
   ];
 
+  // Check authentication
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/auth');
+    }
+  }, [user, loading, navigate]);
+
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 flex items-center justify-center">
+        <div className="text-center">
+          <Brain className="h-12 w-12 text-blue-600 animate-pulse mx-auto mb-4" />
+          <p className="text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
+      <Header />
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent mb-4">
