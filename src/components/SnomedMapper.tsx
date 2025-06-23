@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { Target, Brain, Settings, ArrowRight } from "lucide-react";
+import { Target, Brain, Settings, ArrowRight, TreePine } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Entity {
@@ -22,6 +22,8 @@ interface SnomedMapping {
   snomedCode: string;
   snomedTerm: string;
   snomedSynonyms: string[];
+  snomedHierarchy: string[];
+  originalSnomedTerm: string;
   similarityScore: number;
   embeddingDistance: number;
 }
@@ -38,53 +40,116 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
   const [threshold, setThreshold] = useState(0.8);
   const [processingStep, setProcessingStep] = useState('');
 
-  // Base de dados simulada do SNOMED CT PT-BR
+  // Base de dados simulada do SNOMED CT PT-BR com hierarquia
   const snomedDatabase = {
     "dor torácica aguda": {
       code: "29857009",
       term: "Dor torácica",
+      originalTerm: "Chest pain",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Sign/symptom (finding)", 
+        "Pain/discomfort (finding)",
+        "Regional pain/discomfort (finding)",
+        "Chest pain (finding)"
+      ],
       synonyms: ["dor no peito", "dor precordial", "desconforto torácico"],
       similarity: 0.94
     },
     "dispneia": {
       code: "267036007", 
       term: "Dispneia",
+      originalTerm: "Dyspnea",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Sign/symptom (finding)",
+        "Respiratory sign/symptom (finding)",
+        "Dyspnea (finding)"
+      ],
       synonyms: ["falta de ar", "dificuldade respiratória", "respiração difícil"],
       similarity: 0.96
     },
     "sudorese": {
       code: "415690000",
       term: "Sudorese",
+      originalTerm: "Sweating",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Sign/symptom (finding)",
+        "Skin/subcutaneous tissue sign/symptom (finding)",
+        "Sweating (finding)"
+      ],
       synonyms: ["suor excessivo", "transpiração", "hiperidrose"],
       similarity: 0.93
     },
     "hipertensão arterial sistêmica": {
       code: "38341003",
       term: "Hipertensão arterial",
+      originalTerm: "Hypertensive disorder, systemic arterial",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Disease (disorder)",
+        "Cardiovascular disease (disorder)",
+        "Vascular disease (disorder)",
+        "Hypertensive disorder (disorder)"
+      ],
       synonyms: ["pressão alta", "hipertensão essencial", "hipertensão primária"],
       similarity: 0.97
     },
     "diabetes mellitus tipo 2": {
       code: "44054006",
       term: "Diabetes mellitus tipo 2",
+      originalTerm: "Diabetes mellitus type 2",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Disease (disorder)",
+        "Endocrine/metabolic/nutritional disorder (disorder)",
+        "Metabolic disease (disorder)",
+        "Diabetes mellitus (disorder)",
+        "Type 2 diabetes mellitus (disorder)"
+      ],
       synonyms: ["diabetes tipo 2", "diabetes não insulino-dependente", "DMNID"],
       similarity: 0.99
     },
     "taquicardia": {
       code: "3424008",
       term: "Taquicardia",
+      originalTerm: "Tachycardia",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Sign/symptom (finding)",
+        "Cardiovascular sign/symptom (finding)",
+        "Heart rate/rhythm sign/symptom (finding)",
+        "Tachycardia (finding)"
+      ],
       synonyms: ["frequência cardíaca elevada", "ritmo cardíaco acelerado"],
       similarity: 0.95
     },
     "estertores pulmonares": {
       code: "48409008",
       term: "Estertores",
+      originalTerm: "Respiratory adventitious sound",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Sign/symptom (finding)",
+        "Respiratory sign/symptom (finding)",
+        "Respiratory adventitious sound (finding)"
+      ],
       synonyms: ["ruídos adventícios", "crepitações", "roncos pulmonares"],
       similarity: 0.91
     },
     "infarto agudo do miocárdio": {
       code: "22298006",
       term: "Infarto agudo do miocárdio",
+      originalTerm: "Myocardial infarction",
+      hierarchy: [
+        "Clinical finding (finding)",
+        "Disease (disorder)",
+        "Cardiovascular disease (disorder)",
+        "Heart disease (disorder)",
+        "Ischemic heart disease (disorder)",
+        "Myocardial infarction (disorder)"
+      ],
       synonyms: ["ataque cardíaco", "enfarte do miocárdio", "IAM"],
       similarity: 0.98
     }
@@ -121,6 +186,8 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
           entityLabel: entity.label,
           snomedCode: snomedMatch.code,
           snomedTerm: snomedMatch.term,
+          originalSnomedTerm: snomedMatch.originalTerm,
+          snomedHierarchy: snomedMatch.hierarchy,
           snomedSynonyms: snomedMatch.synonyms,
           similarityScore: snomedMatch.similarity,
           embeddingDistance: 1 - snomedMatch.similarity
@@ -238,7 +305,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
                 {mappings.map((mapping, index) => (
                   <Card key={index} className="border-l-4 border-l-blue-500">
                     <CardContent className="pt-4">
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="font-medium text-sm">
                             "{mapping.entityText}"
@@ -248,18 +315,53 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
                           </Badge>
                         </div>
 
-                        <div className="space-y-2">
-                          <div className="text-sm">
-                            <span className="font-medium text-blue-600">SNOMED:</span> {mapping.snomedCode}
+                        <div className="grid md:grid-cols-2 gap-4">
+                          {/* Informações do Mapeamento */}
+                          <div className="space-y-2">
+                            <div className="text-sm">
+                              <span className="font-medium text-blue-600">SNOMED:</span> {mapping.snomedCode}
+                            </div>
+                            <div className="text-sm">
+                              <span className="font-medium">Termo PT-BR:</span> {mapping.snomedTerm}
+                            </div>
+                            <div className="text-sm">
+                              <span className="font-medium">Termo Original:</span> 
+                              <span className="italic text-gray-600 ml-1">{mapping.originalSnomedTerm}</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-medium">Sinônimos:</span> {mapping.snomedSynonyms.join(', ')}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Distância embedding: {mapping.embeddingDistance.toFixed(4)}
+                            </div>
                           </div>
-                          <div className="text-sm">
-                            <span className="font-medium">Termo:</span> {mapping.snomedTerm}
-                          </div>
-                          <div className="text-xs">
-                            <span className="font-medium">Sinônimos:</span> {mapping.snomedSynonyms.join(', ')}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Distância embedding: {mapping.embeddingDistance.toFixed(4)}
+
+                          {/* Hierarquia SNOMED */}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                              <TreePine className="h-4 w-4" />
+                              Hierarquia SNOMED CT
+                            </div>
+                            <div className="text-xs space-y-1">
+                              {mapping.snomedHierarchy.map((level, levelIndex) => (
+                                <div 
+                                  key={levelIndex} 
+                                  className="flex items-center gap-2"
+                                  style={{ paddingLeft: `${levelIndex * 12}px` }}
+                                >
+                                  <span className="text-gray-400">
+                                    {levelIndex > 0 && '└─ '}
+                                  </span>
+                                  <span className={
+                                    levelIndex === mapping.snomedHierarchy.length - 1 
+                                      ? 'font-medium text-blue-600' 
+                                      : 'text-gray-600'
+                                  }>
+                                    {level}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -1,10 +1,9 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download, FileText, Database, BarChart3, Copy } from "lucide-react";
+import { Download, FileText, Database, BarChart3, Copy, TreePine } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface Entity {
@@ -21,6 +20,8 @@ interface SnomedMapping {
   snomedCode: string;
   snomedTerm: string;
   snomedSynonyms: string[];
+  snomedHierarchy: string[];
+  originalSnomedTerm: string;
   similarityScore: number;
   embeddingDistance: number;
 }
@@ -109,6 +110,8 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
           snomedMapping: mapping ? {
             code: mapping.snomedCode,
             term: mapping.snomedTerm,
+            originalTerm: mapping.originalSnomedTerm,
+            hierarchy: mapping.snomedHierarchy,
             synonyms: mapping.snomedSynonyms,
             similarityScore: mapping.similarityScore
           } : null
@@ -120,9 +123,9 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
       case 'json':
         return JSON.stringify(data, null, 2);
       case 'csv':
-        const csvHeader = 'Entity,Label,Start,End,NER_Confidence,SNOMED_Code,SNOMED_Term,Similarity_Score\n';
+        const csvHeader = 'Entity,Label,Start,End,NER_Confidence,SNOMED_Code,SNOMED_Term,Original_Term,Hierarchy,Similarity_Score\n';
         const csvRows = data.entities.map(entity => 
-          `"${entity.text}","${entity.label}",${entity.position.start},${entity.position.end},${entity.nerConfidence},"${entity.snomedMapping?.code || ''}","${entity.snomedMapping?.term || ''}",${entity.snomedMapping?.similarityScore || ''}`
+          `"${entity.text}","${entity.label}",${entity.position.start},${entity.position.end},${entity.nerConfidence},"${entity.snomedMapping?.code || ''}","${entity.snomedMapping?.term || ''}","${entity.snomedMapping?.originalTerm || ''}","${entity.snomedMapping?.hierarchy?.join(' > ') || ''}",${entity.snomedMapping?.similarityScore || ''}`
         ).join('\n');
         return csvHeader + csvRows;
       case 'xml':
@@ -146,6 +149,8 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
       <snomedMapping>
         <code>${entity.snomedMapping.code}</code>
         <term>${entity.snomedMapping.term}</term>
+        <originalTerm>${entity.snomedMapping.originalTerm}</originalTerm>
+        <hierarchy>${entity.snomedMapping.hierarchy.join(' > ')}</hierarchy>
         <similarityScore>${entity.snomedMapping.similarityScore}</similarityScore>
       </snomedMapping>` : ''}
     </entity>`).join('')}
@@ -247,8 +252,13 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
                       </div>
                       <div className="font-medium text-sm">{entity.text}</div>
                       {mapping && (
-                        <div className="text-xs text-blue-600">
-                          → {mapping.snomedCode}: {mapping.snomedTerm}
+                        <div className="space-y-1">
+                          <div className="text-xs text-blue-600">
+                            → {mapping.snomedCode}: {mapping.snomedTerm}
+                          </div>
+                          <div className="text-xs text-gray-500 italic">
+                            Original: {mapping.originalSnomedTerm}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -263,21 +273,57 @@ const AnnotationResults = ({ originalText, entities, mappings }: AnnotationResul
                   {mappings.map((mapping, index) => (
                     <Card key={index} className="border-l-4 border-l-blue-500">
                       <CardContent className="pt-4">
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <div className="flex items-center justify-between">
                             <div className="font-medium">"{mapping.entityText}"</div>
                             <Badge variant="outline">
                               {(mapping.similarityScore * 100).toFixed(1)}%
                             </Badge>
                           </div>
-                          <div className="text-sm text-blue-600">
-                            <strong>SNOMED:</strong> {mapping.snomedCode}
-                          </div>
-                          <div className="text-sm">
-                            <strong>Termo:</strong> {mapping.snomedTerm}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            <strong>Sinônimos:</strong> {mapping.snomedSynonyms.join(', ')}
+                          
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <div className="text-sm text-blue-600">
+                                <strong>SNOMED:</strong> {mapping.snomedCode}
+                              </div>
+                              <div className="text-sm">
+                                <strong>Termo PT-BR:</strong> {mapping.snomedTerm}
+                              </div>
+                              <div className="text-sm">
+                                <strong>Termo Original:</strong> 
+                                <span className="italic text-gray-600 ml-1">{mapping.originalSnomedTerm}</span>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <strong>Sinônimos:</strong> {mapping.snomedSynonyms.join(', ')}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-sm font-medium">
+                                <TreePine className="h-4 w-4" />
+                                Hierarquia SNOMED CT
+                              </div>
+                              <div className="text-xs space-y-1">
+                                {mapping.snomedHierarchy.map((level, levelIndex) => (
+                                  <div 
+                                    key={levelIndex} 
+                                    className="flex items-center gap-2"
+                                    style={{ paddingLeft: `${levelIndex * 8}px` }}
+                                  >
+                                    <span className="text-gray-400">
+                                      {levelIndex > 0 && '└─ '}
+                                    </span>
+                                    <span className={
+                                      levelIndex === mapping.snomedHierarchy.length - 1 
+                                        ? 'font-medium text-blue-600' 
+                                        : 'text-gray-600'
+                                    }>
+                                      {level}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </CardContent>
