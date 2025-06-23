@@ -9,7 +9,121 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      clinical_annotations: {
+        Row: {
+          created_at: string
+          id: string
+          original_text: string
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          original_text: string
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          original_text?: string
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      extracted_entities: {
+        Row: {
+          annotation_id: string
+          confidence: number
+          created_at: string
+          end_position: number
+          id: string
+          label: string
+          start_position: number
+          text: string
+        }
+        Insert: {
+          annotation_id: string
+          confidence: number
+          created_at?: string
+          end_position: number
+          id?: string
+          label: string
+          start_position: number
+          text: string
+        }
+        Update: {
+          annotation_id?: string
+          confidence?: number
+          created_at?: string
+          end_position?: number
+          id?: string
+          label?: string
+          start_position?: number
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extracted_entities_annotation_id_fkey"
+            columns: ["annotation_id"]
+            isOneToOne: false
+            referencedRelation: "clinical_annotations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      snomed_mappings: {
+        Row: {
+          created_at: string
+          embedding_distance: number
+          entity_id: string
+          id: string
+          original_snomed_term: string
+          similarity_score: number
+          snomed_code: string
+          snomed_hierarchy: string[]
+          snomed_synonyms: string[]
+          snomed_term: string
+        }
+        Insert: {
+          created_at?: string
+          embedding_distance: number
+          entity_id: string
+          id?: string
+          original_snomed_term: string
+          similarity_score: number
+          snomed_code: string
+          snomed_hierarchy?: string[]
+          snomed_synonyms?: string[]
+          snomed_term: string
+        }
+        Update: {
+          created_at?: string
+          embedding_distance?: number
+          entity_id?: string
+          id?: string
+          original_snomed_term?: string
+          similarity_score?: number
+          snomed_code?: string
+          snomed_hierarchy?: string[]
+          snomed_synonyms?: string[]
+          snomed_term?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "snomed_mappings_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "extracted_entities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Brain, FileText, Cpu, Target } from "lucide-react";
+import { Brain, FileText, Cpu, Target, History } from "lucide-react";
 import ClinicalTextInput from "@/components/ClinicalTextInput";
 import NERProcessor from "@/components/NERProcessor";
 import SnomedMapper from "@/components/SnomedMapper";
 import AnnotationResults from "@/components/AnnotationResults";
+import SavedAnnotationsList from "@/components/SavedAnnotationsList";
 
 const Index = () => {
   const [clinicalText, setClinicalText] = useState('');
@@ -19,7 +20,8 @@ const Index = () => {
     { id: 'input', title: 'Narrativa Clínica', icon: FileText },
     { id: 'ner', title: 'Extração NER', icon: Brain },
     { id: 'mapping', title: 'Mapeamento SNOMED', icon: Target },
-    { id: 'results', title: 'Resultados', icon: Cpu }
+    { id: 'results', title: 'Resultados', icon: Cpu },
+    { id: 'saved', title: 'Histórico', icon: History }
   ];
 
   return (
@@ -37,6 +39,7 @@ const Index = () => {
             <Badge variant="secondary">SNOMED CT</Badge>
             <Badge variant="secondary">Similaridade Cosseno</Badge>
             <Badge variant="secondary">Português Brasileiro</Badge>
+            <Badge variant="secondary">Supabase Storage</Badge>
           </div>
         </div>
 
@@ -78,13 +81,13 @@ const Index = () => {
         </div>
 
         <Tabs value={steps[processingStep].id} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             {steps.map((step, index) => (
               <TabsTrigger
                 key={step.id}
                 value={step.id}
                 onClick={() => setProcessingStep(index)}
-                disabled={index > processingStep && processingStep < steps.length - 1}
+                disabled={index > processingStep && processingStep < steps.length - 2}
               >
                 {step.title}
               </TabsTrigger>
@@ -125,6 +128,10 @@ const Index = () => {
               entities={extractedEntities}
               mappings={snomedMappings}
             />
+          </TabsContent>
+
+          <TabsContent value="saved" className="mt-6">
+            <SavedAnnotationsList />
           </TabsContent>
         </Tabs>
       </div>
