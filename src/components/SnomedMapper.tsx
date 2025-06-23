@@ -36,123 +36,214 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [mappings, setMappings] = useState<SnomedMapping[]>([]);
-  const [threshold, setThreshold] = useState(0.8);
+  const [threshold, setThreshold] = useState(0.5);
   const [processingStep, setProcessingStep] = useState('');
   const [hasCompleted, setHasCompleted] = useState(false);
 
-  // Base de dados simulada do SNOMED CT PT-BR com hierarquia
+  // Base de dados expandida do SNOMED CT PT-BR com mais variações
   const snomedDatabase = {
-    "dor torácica aguda": {
+    // Sintomas - Dor
+    "dor": {
+      code: "22253000",
+      term: "Dor",
+      originalTerm: "Pain",
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Pain/discomfort (finding)"],
+      synonyms: ["dor", "desconforto", "algia"],
+      similarity: 0.95
+    },
+    "dor torácica": {
       code: "29857009",
       term: "Dor torácica",
       originalTerm: "Chest pain",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Sign/symptom (finding)", 
-        "Pain/discomfort (finding)",
-        "Regional pain/discomfort (finding)",
-        "Chest pain (finding)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Pain/discomfort (finding)", "Regional pain/discomfort (finding)", "Chest pain (finding)"],
       synonyms: ["dor no peito", "dor precordial", "desconforto torácico"],
       similarity: 0.94
     },
+    "dor abdominal": {
+      code: "21522001",
+      term: "Dor abdominal",
+      originalTerm: "Abdominal pain",
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Pain/discomfort (finding)", "Regional pain/discomfort (finding)", "Abdominal pain (finding)"],
+      synonyms: ["dor na barriga", "dor no abdômen", "cólica"],
+      similarity: 0.92
+    },
+    
+    // Sintomas - Respiratórios
     "dispneia": {
       code: "267036007", 
       term: "Dispneia",
       originalTerm: "Dyspnea",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Sign/symptom (finding)",
-        "Respiratory sign/symptom (finding)",
-        "Dyspnea (finding)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Respiratory sign/symptom (finding)", "Dyspnea (finding)"],
       synonyms: ["falta de ar", "dificuldade respiratória", "respiração difícil"],
       similarity: 0.96
+    },
+    "tosse": {
+      code: "49727002",
+      term: "Tosse",
+      originalTerm: "Cough",
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Respiratory sign/symptom (finding)", "Cough (finding)"],
+      synonyms: ["tosse seca", "tosse produtiva"],
+      similarity: 0.94
+    },
+
+    // Sintomas - Gerais
+    "febre": {
+      code: "386661006",
+      term: "Febre",
+      originalTerm: "Fever",
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "General sign/symptom (finding)", "Fever (finding)"],
+      synonyms: ["hipertermia", "temperatura elevada"],
+      similarity: 0.95
     },
     "sudorese": {
       code: "415690000",
       term: "Sudorese",
       originalTerm: "Sweating",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Sign/symptom (finding)",
-        "Skin/subcutaneous tissue sign/symptom (finding)",
-        "Sweating (finding)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Skin/subcutaneous tissue sign/symptom (finding)", "Sweating (finding)"],
       synonyms: ["suor excessivo", "transpiração", "hiperidrose"],
       similarity: 0.93
     },
-    "hipertensão arterial sistêmica": {
+    "náusea": {
+      code: "422587007",
+      term: "Náusea",
+      originalTerm: "Nausea",
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Gastrointestinal sign/symptom (finding)", "Nausea (finding)"],
+      synonyms: ["enjoo", "mal-estar gástrico"],
+      similarity: 0.94
+    },
+
+    // Doenças
+    "hipertensão": {
       code: "38341003",
       term: "Hipertensão arterial",
       originalTerm: "Hypertensive disorder, systemic arterial",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Disease (disorder)",
-        "Cardiovascular disease (disorder)",
-        "Vascular disease (disorder)",
-        "Hypertensive disorder (disorder)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Cardiovascular disease (disorder)", "Vascular disease (disorder)", "Hypertensive disorder (disorder)"],
       synonyms: ["pressão alta", "hipertensão essencial", "hipertensão primária"],
       similarity: 0.97
+    },
+    "hipertensão arterial": {
+      code: "38341003",
+      term: "Hipertensão arterial",
+      originalTerm: "Hypertensive disorder, systemic arterial",
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Cardiovascular disease (disorder)", "Vascular disease (disorder)", "Hypertensive disorder (disorder)"],
+      synonyms: ["pressão alta", "hipertensão essencial"],
+      similarity: 0.97
+    },
+    "diabetes": {
+      code: "73211009",
+      term: "Diabetes mellitus",
+      originalTerm: "Diabetes mellitus",
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Endocrine/metabolic/nutritional disorder (disorder)", "Metabolic disease (disorder)", "Diabetes mellitus (disorder)"],
+      synonyms: ["diabetes mellitus", "diabete"],
+      similarity: 0.99
+    },
+    "diabetes mellitus": {
+      code: "73211009",
+      term: "Diabetes mellitus",
+      originalTerm: "Diabetes mellitus",
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Endocrine/metabolic/nutritional disorder (disorder)", "Metabolic disease (disorder)", "Diabetes mellitus (disorder)"],
+      synonyms: ["diabetes", "diabete"],
+      similarity: 0.99
     },
     "diabetes mellitus tipo 2": {
       code: "44054006",
       term: "Diabetes mellitus tipo 2",
       originalTerm: "Diabetes mellitus type 2",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Disease (disorder)",
-        "Endocrine/metabolic/nutritional disorder (disorder)",
-        "Metabolic disease (disorder)",
-        "Diabetes mellitus (disorder)",
-        "Type 2 diabetes mellitus (disorder)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Endocrine/metabolic/nutritional disorder (disorder)", "Metabolic disease (disorder)", "Diabetes mellitus (disorder)", "Type 2 diabetes mellitus (disorder)"],
       synonyms: ["diabetes tipo 2", "diabetes não insulino-dependente", "DMNID"],
       similarity: 0.99
     },
+
+    // Sintomas Cardiovasculares
     "taquicardia": {
       code: "3424008",
       term: "Taquicardia",
       originalTerm: "Tachycardia",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Sign/symptom (finding)",
-        "Cardiovascular sign/symptom (finding)",
-        "Heart rate/rhythm sign/symptom (finding)",
-        "Tachycardia (finding)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Cardiovascular sign/symptom (finding)", "Heart rate/rhythm sign/symptom (finding)", "Tachycardia (finding)"],
       synonyms: ["frequência cardíaca elevada", "ritmo cardíaco acelerado"],
       similarity: 0.95
+    },
+
+    // Procedimentos
+    "cirurgia": {
+      code: "387713003",
+      term: "Procedimento cirúrgico",
+      originalTerm: "Surgical procedure",
+      hierarchy: ["Procedure (procedure)", "Surgical procedure (procedure)"],
+      synonyms: ["operação", "intervenção cirúrgica", "ato cirúrgico"],
+      similarity: 0.92
+    },
+    "operação": {
+      code: "387713003",
+      term: "Procedimento cirúrgico",
+      originalTerm: "Surgical procedure",
+      hierarchy: ["Procedure (procedure)", "Surgical procedure (procedure)"],
+      synonyms: ["cirurgia", "intervenção cirúrgica"],
+      similarity: 0.90
+    },
+
+    // Achados físicos
+    "estertores": {
+      code: "48409008",
+      term: "Estertores",
+      originalTerm: "Respiratory adventitious sound",
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Respiratory sign/symptom (finding)", "Respiratory adventitious sound (finding)"],
+      synonyms: ["ruídos adventícios", "crepitações", "roncos pulmonares"],
+      similarity: 0.91
     },
     "estertores pulmonares": {
       code: "48409008",
       term: "Estertores",
       originalTerm: "Respiratory adventitious sound",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Sign/symptom (finding)",
-        "Respiratory sign/symptom (finding)",
-        "Respiratory adventitious sound (finding)"
-      ],
-      synonyms: ["ruídos adventícios", "crepitações", "roncos pulmonares"],
+      hierarchy: ["Clinical finding (finding)", "Sign/symptom (finding)", "Respiratory sign/symptom (finding)", "Respiratory adventitious sound (finding)"],
+      synonyms: ["ruídos adventícios", "crepitações"],
       similarity: 0.91
+    },
+
+    // Doenças cardíacas
+    "infarto": {
+      code: "22298006",
+      term: "Infarto do miocárdio",
+      originalTerm: "Myocardial infarction",
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Cardiovascular disease (disorder)", "Heart disease (disorder)", "Ischemic heart disease (disorder)", "Myocardial infarction (disorder)"],
+      synonyms: ["ataque cardíaco", "enfarte do miocárdio", "IAM"],
+      similarity: 0.98
     },
     "infarto agudo do miocárdio": {
       code: "22298006",
       term: "Infarto agudo do miocárdio",
       originalTerm: "Myocardial infarction",
-      hierarchy: [
-        "Clinical finding (finding)",
-        "Disease (disorder)",
-        "Cardiovascular disease (disorder)",
-        "Heart disease (disorder)",
-        "Ischemic heart disease (disorder)",
-        "Myocardial infarction (disorder)"
-      ],
+      hierarchy: ["Clinical finding (finding)", "Disease (disorder)", "Cardiovascular disease (disorder)", "Heart disease (disorder)", "Ischemic heart disease (disorder)", "Myocardial infarction (disorder)"],
       synonyms: ["ataque cardíaco", "enfarte do miocárdio", "IAM"],
       similarity: 0.98
     }
+  };
+
+  // Função para buscar correspondências mais flexível
+  const findBestMatch = (entityText: string) => {
+    const normalizedEntity = entityText.toLowerCase().trim();
+    
+    // Busca exata primeiro
+    if (snomedDatabase[normalizedEntity]) {
+      return snomedDatabase[normalizedEntity];
+    }
+
+    // Busca por correspondências parciais
+    for (const [key, value] of Object.entries(snomedDatabase)) {
+      // Se a entidade está contida na chave ou vice-versa
+      if (key.includes(normalizedEntity) || normalizedEntity.includes(key)) {
+        return { ...value, similarity: value.similarity * 0.9 }; // Reduz um pouco a similaridade
+      }
+      
+      // Busca em sinônimos
+      if (value.synonyms.some(synonym => 
+        synonym.includes(normalizedEntity) || normalizedEntity.includes(synonym)
+      )) {
+        return { ...value, similarity: value.similarity * 0.85 }; // Reduz mais a similaridade
+      }
+    }
+
+    return null;
   };
 
   const processSemanticMapping = async () => {
@@ -177,8 +268,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
 
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      const normalizedText = entity.text.toLowerCase().trim();
-      const snomedMatch = snomedDatabase[normalizedText];
+      const snomedMatch = findBestMatch(entity.text);
 
       if (snomedMatch && snomedMatch.similarity >= threshold) {
         newMappings.push({
@@ -217,6 +307,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
     onMappingsComplete(mappings);
   };
 
+  // ... keep existing code (getScoreColor, getScoreBadge functions)
   const getScoreColor = (score: number) => {
     if (score >= 0.95) return 'text-green-600';
     if (score >= 0.85) return 'text-yellow-600';
@@ -253,7 +344,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
                   value={[threshold]}
                   onValueChange={(value) => setThreshold(value[0])}
                   max={1}
-                  min={0.5}
+                  min={0.3}
                   step={0.05}
                   className="mt-2"
                   disabled={isProcessing}
