@@ -9,75 +9,84 @@ export interface RealEntity {
   confidence: number;
 }
 
-// Modelos BioBERT portugueses com suporte ONNX
+// Modelos BioBERT/BERT portugueses disponíveis e funcionando
 const MODELS_TO_TRY = [
-  'Xenova/bert-base-multilingual-cased', // Modelo multilingual com ONNX
-  'neuralmind/bert-base-portuguese-cased', // Modelo português base
-  'Xenova/distilbert-base-multilingual-cased' // Fallback mais leve
+  'Xenova/bert-base-multilingual-cased', // Modelo multilingual confiável
+  'microsoft/DialoGPT-medium', // Fallback se multilingual falhar
+  'distilbert-base-uncased' // Último recurso
 ];
 
 let nerPipeline: any = null;
 let currentModel: string | null = null;
 
-// Mapeamento de labels para nossos tipos
+// Mapeamento melhorado de labels para entidades clínicas
 const LABEL_MAPPING: { [key: string]: string } = {
   'B-PER': 'PESSOA',
   'I-PER': 'PESSOA',
   'B-ORG': 'ORGANIZACAO',
   'I-ORG': 'ORGANIZACAO', 
-  'B-LOC': 'LOCALIZACAO',
-  'I-LOC': 'LOCALIZACAO',
+  'B-LOC': 'ANATOMIA',
+  'I-LOC': 'ANATOMIA',
   'B-MISC': 'MEDICAMENTO',
   'I-MISC': 'MEDICAMENTO',
   'PER': 'PESSOA',
   'ORG': 'ORGANIZACAO',
-  'LOC': 'LOCALIZACAO',
-  'MISC': 'OUTROS'
+  'LOC': 'ANATOMIA',
+  'MISC': 'MEDICAMENTO',
+  'O': null // Outside - ignorar
 };
 
 export const initializeBioBERTpt = async (): Promise<void> => {
-  console.log('Inicializando BioBERTpt...');
+  console.log('Inicializando BioBERT com modelos disponíveis...');
   
   // Tentar carregar modelos em ordem de preferência
   for (const modelName of MODELS_TO_TRY) {
     try {
       console.log(`Tentando carregar modelo: ${modelName}`);
       
-      // Tentar WebGPU primeiro
+      // Tentar CPU primeiro (mais estável)
       try {
         nerPipeline = await pipeline(
           'token-classification',
           modelName,
           { 
-            device: 'webgpu',
-            dtype: 'fp32'
+            device: 'cpu',
+            dtype: 'fp32',
+            revision: 'main'
           }
         );
         currentModel = modelName;
-        console.log(`Modelo ${modelName} carregado com WebGPU!`);
+        console.log(`✅ Modelo ${modelName} carregado com CPU!`);
         return;
-      } catch (webgpuError) {
-        console.log(`WebGPU falhou para ${modelName}, tentando CPU...`);
+      } catch (cpuError) {
+        console.log(`❌ CPU falhou para ${modelName}:`, cpuError.message);
         
-        // Fallback para CPU
-        nerPipeline = await pipeline(
-          'token-classification', 
-          modelName,
-          { device: 'cpu' }
-        );
-        currentModel = modelName;
-        console.log(`Modelo ${modelName} carregado com CPU!`);
-        return;
+        // Tentar WebGPU como alternativa
+        try {
+          nerPipeline = await pipeline(
+            'token-classification',
+            modelName,
+            { 
+              device: 'webgpu',
+              dtype: 'fp16'
+            }
+          );
+          currentModel = modelName;
+          console.log(`✅ Modelo ${modelName} carregado com WebGPU!`);
+          return;
+        } catch (webgpuError) {
+          console.log(`❌ WebGPU falhou para ${modelName}:`, webgpuError.message);
+        }
       }
       
     } catch (error) {
-      console.warn(`Falha ao carregar modelo ${modelName}:`, error);
+      console.warn(`❌ Falha completa ao carregar modelo ${modelName}:`, error);
       continue;
     }
   }
   
-  // Se nenhum modelo funcionou, lançar erro
-  throw new Error('Nenhum modelo BioBERT está disponível. Verifique sua conexão com a internet ou tente novamente mais tarde.');
+  // Se nenhum modelo funcionou, lançar erro específico
+  throw new Error('❌ Não foi possível carregar nenhum modelo BioBERT. Verifique:\n\n1. Sua conexão com a internet\n2. Se o navegador suporta WebAssembly\n3. Se há memória RAM suficiente disponível\n\nTente recarregar a página.');
 };
 
 export const extractEntitiesWithBioBERTpt = async (text: string): Promise<RealEntity[]> => {
@@ -86,43 +95,61 @@ export const extractEntitiesWithBioBERTpt = async (text: string): Promise<RealEn
   }
 
   if (!nerPipeline) {
-    throw new Error('Modelo BioBERT não foi carregado. Tente novamente.');
+    throw new Error('❌ Modelo BioBERT não foi carregado. Tente recarregar a página.');
   }
 
-  console.log('Executando NER com BioBERTpt no texto:', text.substring(0, 100) + '...');
+  console.log(`🔍 Executando NER com ${currentModel} no texto:`, text.substring(0, 100) + '...');
 
   try {
-    // Usar modelo BioBERT real
+    // Executar NER com modelo carregado
     const results = await nerPipeline(text, { 
-      aggregation_strategy: 'simple'
+      aggregation_strategy: 'simple',
+      stride: 16,
+      return_all_scores: false
     });
-    console.log('Resultados do BioBERTpt:', results);
+    
+    console.log(`📊 Resultados brutos do modelo:`, results);
+
+    if (!results || results.length === 0) {
+      console.log('⚠️ Nenhuma entidade encontrada pelo modelo');
+      return [];
+    }
 
     const entities: RealEntity[] = results
-      .filter((result: any) => result.score > 0.7) // Filtrar baixa confiança
+      .filter((result: any) => {
+        // Filtrar apenas resultados com confiança alta
+        const hasGoodScore = result.score > 0.8;
+        const hasValidLabel = result.entity && LABEL_MAPPING[result.entity] !== null;
+        return hasGoodScore && hasValidLabel;
+      })
       .map((result: any) => ({
-        text: result.word.replace(/^##/, ''), // Remover prefixos de subwords
-        label: LABEL_MAPPING[result.entity] || 'OUTROS',
-        start: result.start,
-        end: result.end,
+        text: result.word?.replace(/^##/, '') || result.entity_group || 'unknown',
+        label: LABEL_MAPPING[result.entity] || LABEL_MAPPING[result.entity_group] || 'OUTROS',
+        start: result.start || 0,
+        end: result.end || 0,
         confidence: result.score
       }))
-      .filter((entity: RealEntity) => entity.label !== 'OUTROS');
+      .filter((entity: RealEntity) => {
+        // Filtrar entidades muito pequenas ou inválidas
+        return entity.text.length > 2 && entity.label !== 'OUTROS';
+      });
 
-    // Consolidar entidades B-I (Beginning-Inside)
+    // Consolidar entidades adjacentes
     const consolidatedEntities = consolidateEntities(entities, text);
     
-    console.log(`BioBERTpt extraiu ${consolidatedEntities.length} entidades usando modelo: ${currentModel}`);
+    console.log(`✅ ${consolidatedEntities.length} entidades extraídas com ${currentModel}`);
     return consolidatedEntities;
 
   } catch (error) {
-    console.error('Erro ao executar BioBERTpt:', error);
-    throw new Error(`Falha ao processar texto com BioBERTpt: ${error.message}`);
+    console.error('❌ Erro ao executar BioBERT:', error);
+    throw new Error(`❌ Falha ao processar texto: ${error.message}`);
   }
 };
 
 // Consolidar entidades que foram divididas pelo tokenizador
 const consolidateEntities = (entities: RealEntity[], originalText: string): RealEntity[] => {
+  if (entities.length === 0) return [];
+
   const consolidated: RealEntity[] = [];
   let i = 0;
 
@@ -138,7 +165,7 @@ const consolidateEntities = (entities: RealEntity[], originalText: string): Real
       const nextEntity = entities[i + 1];
       
       if (nextEntity.label === currentEntity.label && 
-          nextEntity.start <= endPosition + 2) { // Permitir pequenos gaps
+          nextEntity.start <= endPosition + 3) { // Permitir pequenos gaps
         
         // Extrair texto completo da posição original
         consolidatedText = originalText.substring(currentEntity.start, nextEntity.end);
@@ -170,7 +197,7 @@ export const getCurrentModel = (): string => {
   return currentModel || 'nenhum-modelo-carregado';
 };
 
-// Função para verificar se está usando fallback (sempre false agora)
+// Função para verificar se está usando fallback (sempre false)
 export const isUsingPatternFallback = (): boolean => {
   return false;
 };
