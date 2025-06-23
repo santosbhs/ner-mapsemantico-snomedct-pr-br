@@ -8,8 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   initializeBioBERTpt, 
   extractEntitiesWithBioBERTpt, 
-  getCurrentModel, 
-  isUsingPatternFallback,
+  getCurrentModel,
   type RealEntity 
 } from "@/utils/realBioBERT";
 import NERProcessingState from "./NERProcessingState";
@@ -52,15 +51,13 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
         setProgress(30);
       }
 
-      const usingFallback = isUsingPatternFallback();
-      
-      setProcessingStep(usingFallback ? 'Aplicando padrões clínicos...' : 'Tokenizando texto clínico...');
+      setProcessingStep('Tokenizando texto clínico...');
       setProgress(50);
 
       // Simular delay para mostrar progresso
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      setProcessingStep(usingFallback ? 'Extraindo entidades com padrões...' : 'Executando inferência NER com BioBERTpt...');
+      setProcessingStep('Executando inferência NER com BioBERTpt...');
       setProgress(70);
 
       // Executar NER real
@@ -77,18 +74,18 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
       setEntities(extractedEntities);
       setIsProcessing(false);
 
-      const methodUsed = usingFallback ? 'padrões clínicos' : `modelo ${getCurrentModel()}`;
+      const modelName = getCurrentModel();
 
       if (extractedEntities.length === 0) {
         toast({
           title: "NER Concluído",
-          description: `Nenhuma entidade clínica foi encontrada no texto usando ${methodUsed}. Tente com um texto mais específico.`,
+          description: `Nenhuma entidade clínica foi encontrada no texto usando modelo ${modelName}. Tente com um texto mais específico.`,
           variant: "destructive"
         });
       } else {
         toast({
           title: "NER Concluído",
-          description: `${extractedEntities.length} entidades clínicas extraídas usando ${methodUsed}!`,
+          description: `${extractedEntities.length} entidades clínicas extraídas usando modelo ${modelName}!`,
         });
       }
 
@@ -114,11 +111,6 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
             Extração de Entidades com BioBERTpt Real
-            {modelStatus === 'clinical-patterns-fallback' && (
-              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
-                Fallback
-              </span>
-            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">

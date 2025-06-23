@@ -1,6 +1,5 @@
 
-import { pipeline, AutoTokenizer, AutoModelForTokenClassification } from '@huggingface/transformers';
-import { extractClinicalEntities, type Entity } from './clinicalPatterns';
+import { pipeline } from '@huggingface/transformers';
 
 export interface RealEntity {
   text: string;
@@ -19,7 +18,6 @@ const MODELS_TO_TRY = [
 
 let nerPipeline: any = null;
 let currentModel: string | null = null;
-let usePatternFallback = false;
 
 // Mapeamento de labels para nossos tipos
 const LABEL_MAPPING: { [key: string]: string } = {
@@ -78,34 +76,22 @@ export const initializeBioBERTpt = async (): Promise<void> => {
     }
   }
   
-  // Se nenhum modelo funcionou, usar padrões clínicos
-  console.warn('Nenhum modelo BioBERT disponível, usando padrões clínicos como fallback');
-  usePatternFallback = true;
-  currentModel = 'clinical-patterns-fallback';
+  // Se nenhum modelo funcionou, lançar erro
+  throw new Error('Nenhum modelo BioBERT está disponível. Verifique sua conexão com a internet ou tente novamente mais tarde.');
 };
 
 export const extractEntitiesWithBioBERTpt = async (text: string): Promise<RealEntity[]> => {
-  if (!nerPipeline && !usePatternFallback) {
+  if (!nerPipeline) {
     await initializeBioBERTpt();
+  }
+
+  if (!nerPipeline) {
+    throw new Error('Modelo BioBERT não foi carregado. Tente novamente.');
   }
 
   console.log('Executando NER com BioBERTpt no texto:', text.substring(0, 100) + '...');
 
   try {
-    // Se usando fallback de padrões
-    if (usePatternFallback) {
-      console.log('Usando extração por padrões clínicos');
-      const patternEntities = extractClinicalEntities(text);
-      
-      return patternEntities.map((entity: Entity) => ({
-        text: entity.text,
-        label: entity.label,
-        start: entity.start,
-        end: entity.end,
-        confidence: entity.confidence
-      }));
-    }
-
     // Usar modelo BioBERT real
     const results = await nerPipeline(text, { 
       aggregation_strategy: 'simple'
@@ -131,18 +117,7 @@ export const extractEntitiesWithBioBERTpt = async (text: string): Promise<RealEn
 
   } catch (error) {
     console.error('Erro ao executar BioBERTpt:', error);
-    
-    // Fallback para padrões em caso de erro
-    console.log('Erro no modelo, usando padrões clínicos como fallback');
-    const patternEntities = extractClinicalEntities(text);
-    
-    return patternEntities.map((entity: Entity) => ({
-      text: entity.text,
-      label: entity.label,
-      start: entity.start,
-      end: entity.end,
-      confidence: entity.confidence
-    }));
+    throw new Error(`Falha ao processar texto com BioBERTpt: ${error.message}`);
   }
 };
 
@@ -195,7 +170,7 @@ export const getCurrentModel = (): string => {
   return currentModel || 'nenhum-modelo-carregado';
 };
 
-// Função para verificar se está usando fallback
+// Função para verificar se está usando fallback (sempre false agora)
 export const isUsingPatternFallback = (): boolean => {
-  return usePatternFallback;
+  return false;
 };
