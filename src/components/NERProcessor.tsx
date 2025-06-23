@@ -2,58 +2,97 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Brain, ArrowRight } from "lucide-react";
+import { Brain, ArrowRight, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { Entity, extractClinicalEntities } from "@/utils/clinicalPatterns";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { initializeBioBERTpt, extractEntitiesWithBioBERTpt, type RealEntity } from "@/utils/realBioBERT";
 import NERProcessingState from "./NERProcessingState";
 import EntityResults from "./EntityResults";
 
 interface NERProcessorProps {
   text: string;
-  onEntitiesExtracted: (entities: Entity[]) => void;
+  onEntitiesExtracted: (entities: RealEntity[]) => void;
 }
 
 const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [entities, setEntities] = useState<Entity[]>([]);
+  const [entities, setEntities] = useState<RealEntity[]>([]);
   const [processingStep, setProcessingStep] = useState('');
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
 
-  // Simulação do processamento NER com BioBERTpt
-  const processNER = async () => {
+  const processRealNER = async () => {
     setIsProcessing(true);
     setProgress(0);
-    setProcessingStep('Carregando modelo BioBERTpt...');
+    setLoadingError(null);
+    setProcessingStep('Inicializando BioBERTpt...');
 
-    // Simular carregamento do modelo
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setProgress(20);
-    setProcessingStep('Tokenizando texto clínico...');
+    try {
+      // Verificar se o texto não está vazio
+      if (!text.trim()) {
+        throw new Error('Texto vazio. Por favor, insira um texto clínico para análise.');
+      }
 
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setProgress(40);
-    setProcessingStep('Executando inferência NER...');
+      // Carregar modelo se ainda não foi carregado
+      if (!isModelLoaded) {
+        setProgress(10);
+        setProcessingStep('Baixando modelo BioBERTpt (pode demorar na primeira execução)...');
+        
+        await initializeBioBERTpt();
+        setIsModelLoaded(true);
+        setProgress(30);
+      }
 
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    setProgress(70);
-    setProcessingStep('Pós-processando entidades...');
+      setProcessingStep('Tokenizando texto clínico...');
+      setProgress(50);
 
-    // Extrair entidades do texto real
-    const extractedEntities = extractClinicalEntities(text);
+      // Simular delay para mostrar progresso
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-    setProgress(100);
-    setProcessingStep('Extração concluída!');
+      setProcessingStep('Executando inferência NER com BioBERTpt...');
+      setProgress(70);
 
-    setEntities(extractedEntities);
-    setIsProcessing(false);
+      // Executar NER real
+      const extractedEntities = await extractEntitiesWithBioBERTpt(text);
 
-    toast({
-      title: "NER Concluído",
-      description: `${extractedEntities.length} entidades clínicas extraídas com sucesso!`,
-    });
+      setProgress(90);
+      setProcessingStep('Pós-processando entidades...');
 
-    onEntitiesExtracted(extractedEntities);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      setProgress(100);
+      setProcessingStep('Extração concluída!');
+
+      setEntities(extractedEntities);
+      setIsProcessing(false);
+
+      if (extractedEntities.length === 0) {
+        toast({
+          title: "NER Concluído",
+          description: "Nenhuma entidade clínica foi encontrada no texto. Tente com um texto mais específico.",
+          variant: "destructive"
+        });
+      } else {
+        toast({
+          title: "NER Concluído",
+          description: `${extractedEntities.length} entidades clínicas extraídas com BioBERTpt!`,
+        });
+      }
+
+      onEntitiesExtracted(extractedEntities);
+
+    } catch (error) {
+      console.error('Erro no processamento NER:', error);
+      setLoadingError(error.message);
+      setIsProcessing(false);
+      
+      toast({
+        title: "Erro no NER",
+        description: error.message || "Falha ao processar o texto com BioBERTpt",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -62,27 +101,49 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Brain className="h-5 w-5" />
-            Extração de Entidades Clínicas (NER)
+            Extração de Entidades com BioBERTpt Real
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!isProcessing && entities.length === 0 ? (
+          {loadingError && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {loadingError}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="ml-2"
+                  onClick={() => {
+                    setLoadingError(null);
+                    setIsModelLoaded(false);
+                  }}
+                >
+                  Tentar Novamente
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!isProcessing && entities.length === 0 && !loadingError ? (
             <NERProcessingState
               isProcessing={isProcessing}
               progress={progress}
               processingStep={processingStep}
-              onProcessStart={processNER}
+              onProcessStart={processRealNER}
+              isRealModel={true}
             />
           ) : isProcessing ? (
             <NERProcessingState
               isProcessing={isProcessing}
               progress={progress}
               processingStep={processingStep}
-              onProcessStart={processNER}
+              onProcessStart={processRealNER}
+              isRealModel={true}
             />
-          ) : (
+          ) : entities.length > 0 ? (
             <EntityResults entities={entities} text={text} />
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -93,7 +154,7 @@ const NERProcessor = ({ text, onEntitiesExtracted }: NERProcessorProps) => {
             className="flex items-center gap-2"
             size="lg"
           >
-            Mapear para SNOMED CT
+            Mapear para SNOMED CT Real
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
