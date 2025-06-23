@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +38,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
   const [mappings, setMappings] = useState<SnomedMapping[]>([]);
   const [threshold, setThreshold] = useState(0.8);
   const [processingStep, setProcessingStep] = useState('');
+  const [hasCompleted, setHasCompleted] = useState(false);
 
   // Base de dados simulada do SNOMED CT PT-BR com hierarquia
   const snomedDatabase = {
@@ -204,11 +204,17 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
 
     setMappings(newMappings);
     setIsProcessing(false);
+    setHasCompleted(true);
 
     toast({
       title: "Mapeamento SNOMED Concluído",
       description: `${newMappings.length} de ${entities.length} entidades mapeadas (threshold: ${threshold})`,
     });
+  };
+
+  const handleProceedToHL7 = () => {
+    console.log('Proceeding to HL7 with mappings:', mappings);
+    onMappingsComplete(mappings);
   };
 
   const getScoreColor = (score: number) => {
@@ -250,6 +256,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
                   min={0.5}
                   step={0.05}
                   className="mt-2"
+                  disabled={isProcessing}
                 />
                 <div className="text-xs text-muted-foreground mt-1">
                   Apenas mapeamentos com similaridade ≥ {threshold.toFixed(2)} serão aceitos
@@ -258,7 +265,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
             </div>
           </div>
 
-          {!isProcessing && mappings.length === 0 && (
+          {!isProcessing && !hasCompleted && (
             <div className="text-center py-8">
               <div className="space-y-4">
                 <div className="text-lg font-medium">
@@ -290,7 +297,7 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
             </div>
           )}
 
-          {mappings.length > 0 && (
+          {hasCompleted && mappings.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="text-lg font-medium">
@@ -376,17 +383,37 @@ const SnomedMapper = ({ entities, onMappingsComplete }: SnomedMapperProps) => {
               </div>
             </div>
           )}
+
+          {hasCompleted && mappings.length === 0 && (
+            <div className="text-center py-8">
+              <div className="text-lg font-medium text-orange-600 mb-2">
+                Nenhum mapeamento encontrado
+              </div>
+              <div className="text-sm text-muted-foreground mb-4">
+                Nenhuma entidade atingiu o threshold de similaridade de {threshold.toFixed(2)}
+              </div>
+              <Button 
+                onClick={() => {
+                  setHasCompleted(false);
+                  setMappings([]);
+                }} 
+                variant="outline"
+              >
+                Tentar Novamente
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {mappings.length > 0 && (
+      {hasCompleted && (
         <div className="flex justify-end">
           <Button
-            onClick={() => onMappingsComplete(mappings)}
+            onClick={handleProceedToHL7}
             className="flex items-center gap-2"
             size="lg"
           >
-            Ver Resultados Finais
+            Prosseguir para HL7 FHIR
             <ArrowRight className="h-4 w-4" />
           </Button>
         </div>

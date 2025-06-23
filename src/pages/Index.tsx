@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,6 +56,25 @@ const Index = () => {
   if (!user) {
     return null;
   }
+
+  const handleSnomedMappingsComplete = (mappings) => {
+    console.log('SNOMED mappings complete:', mappings);
+    setSnomedMappings(mappings);
+    setProcessingStep(3); // Move to HL7 step
+  };
+
+  const handleHL7MappingsComplete = (mappings) => {
+    console.log('HL7 mappings complete:', mappings);
+    setHL7Mappings(mappings);
+    setProcessingStep(4); // Move to results step
+  };
+
+  const handleTabChange = (value) => {
+    const stepIndex = steps.findIndex(step => step.id === value);
+    if (stepIndex !== -1) {
+      setProcessingStep(stepIndex);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50">
@@ -115,13 +135,12 @@ const Index = () => {
           </div>
         </div>
 
-        <Tabs value={steps[processingStep].id} className="w-full">
+        <Tabs value={steps[processingStep].id} onValueChange={handleTabChange} className="w-full">
           <TabsList className="grid w-full grid-cols-6">
             {steps.map((step, index) => (
               <TabsTrigger
                 key={step.id}
                 value={step.id}
-                onClick={() => setProcessingStep(index)}
                 disabled={index > processingStep && processingStep < steps.length - 2}
               >
                 {step.title}
@@ -141,6 +160,7 @@ const Index = () => {
             <NERProcessor 
               text={clinicalText}
               onEntitiesExtracted={(entities) => {
+                console.log('Entities extracted:', entities);
                 setExtractedEntities(entities);
                 setProcessingStep(2);
               }}
@@ -150,20 +170,14 @@ const Index = () => {
           <TabsContent value="snomed" className="mt-6">
             <SnomedMapper 
               entities={extractedEntities}
-              onMappingsComplete={(mappings) => {
-                setSnomedMappings(mappings);
-                setProcessingStep(3);
-              }}
+              onMappingsComplete={handleSnomedMappingsComplete}
             />
           </TabsContent>
 
           <TabsContent value="hl7" className="mt-6">
             <HL7Mapper 
               entities={extractedEntities}
-              onMappingsComplete={(mappings) => {
-                setHL7Mappings(mappings);
-                setProcessingStep(4);
-              }}
+              onMappingsComplete={handleHL7MappingsComplete}
             />
           </TabsContent>
 
